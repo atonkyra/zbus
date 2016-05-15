@@ -1,0 +1,40 @@
+#!/usr/bin/env python
+import argparse
+import util.filemonitor
+import logging
+import zmq
+import json
+import time
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
+)
+logger = logging.getLogger('zread')
+
+parser = argparse.ArgumentParser(description='tail a logfile and output to a ZeroMQ subscriber')
+parser.add_argument('-n', '--name', required=True, help='logger name')
+parser.add_argument('-f', '--file', required=True, help='file to tail')
+parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
+args = parser.parse_args()
+
+def main():
+    context = zmq.Context()
+    zhub_socket = context.socket(zmq.PUB)
+    zhub_socket.connect(args.publish)
+    for line in util.filemonitor.FileMonitor(args.file).read():
+        out = None
+        try:
+            parsed = json.loads(line)
+            out = {'timestamp': time.time(), 'json': parsed}
+        except:
+            out = {'timestamp': time.time(), 'text': line.strip()}
+        out_json = json.dumps(out)
+        zhub_socket.send(args.name.encode('ascii', errors='ignore'), flags=zmq.SNDMORE)
+        zhub_socket.send_string(out_json)
+        logger.info("sent %s", out_json)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BaseException as be:
+        logger.exception(be)

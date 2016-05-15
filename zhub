@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+import argparse
+import util.filemonitor
+import logging
+import zmq
+import json
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
+)
+logger = logging.getLogger('zhub')
+
+parser = argparse.ArgumentParser(description='listen for incoming messages and deal them to subscribers')
+parser.add_argument('-l', '--listen', required=True, help='zmq-notation of the listen socket, ex: tcp://*:1337')
+parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket, ex: tcp://*:31337')
+args = parser.parse_args()
+
+def main():
+    context = zmq.Context()
+    listen_socket = context.socket(zmq.SUB)
+    listen_socket.set(zmq.SUBSCRIBE, b'')
+    listen_socket.bind(args.listen)
+    publish_socket = context.socket(zmq.PUB)
+    publish_socket.bind(args.publish)
+    while True:
+        topic, data = listen_socket.recv_multipart()
+        publish_socket.send(topic, flags=zmq.SNDMORE)
+        publish_socket.send(data)
+        logger.info("received & relayed: [%s] %s", topic.decode('ascii'), data.decode('ascii'))
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BaseException as be:
+        logger.exception(be)
+
