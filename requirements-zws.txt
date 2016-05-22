@@ -1,0 +1,5 @@
+gevent==1.1.1
+gevent-websocket==0.9.5
+greenlet==0.4.9
+pkg-resources==0.0.0
+pyzmq==15.2.0

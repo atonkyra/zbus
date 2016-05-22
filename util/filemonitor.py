@@ -2,65 +2,53 @@ import os
 import time
 import logging
 
+
 logger = logging.getLogger('FileMonitor')
 
+
 class FileMonitor(object):
-    def __init__(self, file):
-        self._running = False
-        self._filehandle = None
-        self._file = file
+    def __init__(self, target):
+        self._target = target
+        self._position = None
+        self._size = None
+        self._inode = None
+        self._fd = None
+
+    def open(self):
+        self._fd = open(self._target, 'r')
+        st_results = os.stat(self._target)
+        self._size = st_results[6]
+        self._inode = st_results.st_ino
+        self._fd.seek(self._size)
+        self._position = self._fd.tell()
+
+    def reopen(self):
+        if self._fd is not None:
+            self._fd.close()
+        self.open()
+
+    def check_file_sanity(self):
+        if self._fd is None:
+            self.open()
+            return
+        st_results = os.stat(self._target)
+        if st_results.st_ino != self._inode:
+            logger.info('file rotated, reopening...')
+            self.reopen()
+        elif st_results[6] < self._position:
+            logger.info('file truncated, reopening...')
+            self.reopen()
 
     def read(self):
-        st_results = None
-        st_size = None
-        ino = None
+        try:
+            self.check_file_sanity()
+        except BaseException as be:
+            logger.error(be)
+            return
+        line = self._fd.readline()
+        if not line:
+            self._fd.seek(self._position)
+            return None
+        self._position = self._fd.tell()
+        return line.strip()
 
-        while self._filehandle is None:
-            try:
-                self._filehandle = open(self._file, 'r')
-                st_results = os.stat(self._file)
-                st_size = st_results[6]
-                ino = os.stat(self._filehandle.name).st_ino
-                self._filehandle.seek(st_size)
-            except:
-                logger.error('failed to open %s, retrying in 1 second...', self._file)
-                self._filehandle = None
-                time.sleep(1)
-
-        logger.info('listening for changes in file: %s', self._file)
-
-        while True:
-            gotline = False
-            test_ino = ino
-            try:
-                test_ino = os.stat(self._filehandle.name).st_ino
-            except:
-                logger.error('failed to stat %s, retrying in 1 second...', self._file)
-                time.sleep(1)
-                continue
-
-            if ino != test_ino:
-                try:
-                    if self._filehandle is not None:
-                        self._filehandle.close()
-                        self._filehandle = None
-                    self._filehandle = open(self._file, 'r')
-                except:
-                    logger.error('failed to open %s, retrying in 1 second...', self._file)
-                    time.sleep(1)
-                    continue
-                st_results = os.stat(self._file)
-                st_size = st_results[6]
-                ino = os.stat(self._filehandle.name).st_ino
-
-            where = self._filehandle.tell()
-            line = self._filehandle.readline()
-            if not line:
-                self._filehandle.seek(where)
-            else:
-                gotline = True
-
-            if gotline:
-                yield line.strip()
-            else:
-                time.sleep(0.1)

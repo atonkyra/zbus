@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import util.filemonitor
+import util.multifilemonitor
 import logging
 import zmq
 import json
@@ -12,8 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger('zread')
 
 parser = argparse.ArgumentParser(description='tail a logfile and output to a ZeroMQ subscriber')
-parser.add_argument('-n', '--name', required=True, help='logger name')
-parser.add_argument('-f', '--file', required=True, help='file to tail')
+parser.add_argument('-f', '--file', required=True, help='file to tail, notation topic:file', action='append')
 parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
 args = parser.parse_args()
 
@@ -21,7 +20,15 @@ def main():
     context = zmq.Context()
     zhub_socket = context.socket(zmq.PUB)
     zhub_socket.connect(args.publish)
-    for line in util.filemonitor.FileMonitor(args.file).read():
+    targets = {}
+    for target in args.file:
+        if ':' not in target:
+            logger.error('invalid target: %s, skip!', target)
+            continue
+        topic, file = target.split(':', 1)
+        targets[topic] = file
+    for result in util.multifilemonitor.MultiFileMonitor(targets).read():
+        topic, line = result
         out = None
         try:
             parsed = json.loads(line)
@@ -29,7 +36,7 @@ def main():
         except:
             out = {'timestamp': time.time(), 'text': line.strip()}
         out_json = json.dumps(out)
-        zhub_socket.send(args.name.encode('ascii', errors='ignore'), flags=zmq.SNDMORE)
+        zhub_socket.send(topic.encode('ascii', errors='ignore'), flags=zmq.SNDMORE)
         zhub_socket.send_string(out_json)
         logger.info("sent %s", out_json)
 

@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+from geventwebsocket.handler import WebSocketHandler
+from gevent import pywsgi
+import gevent
+import zmq.green as zmq
+
+import argparse
+import logging
+import json
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
+)
+logger = logging.getLogger('zws')
+
+parser = argparse.ArgumentParser(description='listen for incoming messages and deal them to subscribers')
+parser.add_argument('-l', '--listen', required=True, help='listen-address')
+parser.add_argument('-p', '--port', required=True, help='listen-port')
+parser.add_argument('-z', '--publisher-socket', required=True, help='zmq-notation of the publish socket, ex: tcp://1.2.3.4:31337')
+parser.add_argument('-S', '--ssl', required=False, help='arg: keyfile,certfile', default=None)
+args = parser.parse_args()
+
+ctx = zmq.Context()
+
+def handle_listener(ws, remote_addr, remote_port):
+    while True:
+        logger.info('<%s:%s> new subscriber', remote_addr, remote_port)
+        subscribe_target = ws.read_message()
+        logger.info('<%s:%s> subscribed to "%s"', remote_addr, remote_port, subscribe_target)
+        zs = ctx.socket(zmq.SUB)
+        zs.set(zmq.SUBSCRIBE, b'')
+        zs.connect(args.publisher_socket)
+        while True:
+            topic, data = zs.recv_multipart()
+            jd = json.loads(data)
+            jd['topic'] = topic
+            ws.send(json.dumps(jd))
+
+def app(environ, start_response):
+    handle_listener(environ['wsgi.websocket'], environ['REMOTE_ADDR'], environ['REMOTE_PORT'])
+
+server = None
+if args.ssl is not None:
+    key, cert = args.ssl.split(',')
+    server = pywsgi.WSGIServer((args.listen, int(args.port)), app, handler_class=WebSocketHandler, keyfile=key, certfile=cert)
+else:
+    server = pywsgi.WSGIServer((args.listen, int(args.port)), app, handler_class=WebSocketHandler)
+server.serve_forever()
