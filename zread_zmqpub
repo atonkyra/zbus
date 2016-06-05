@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+import argparse
+import util.multifilemonitor
+import logging
+import zmq
+import json
+import time
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
+)
+logger = logging.getLogger('zread')
+
+parser = argparse.ArgumentParser(description='tail a logfile and output to a ZeroMQ subscriber')
+parser.add_argument('-z', '--zmq-pub-address', required=True, help='zmq-pub to tail', action='append')
+parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
+parser.add_argument('-f', '--filter', required=False, help='filter by json content, syntax a.b.c=d')
+args = parser.parse_args()
+
+def main():
+    context = zmq.Context()
+    zhub_socket = context.socket(zmq.PUB)
+    zhub_socket.connect(args.publish)
+    readers = []
+    for reader in args.zmq_pub_address:
+        ds_zmq = context.socket(zmq.SUB)
+        ds_zmq.set(zmq.SUBSCRIBE, b'')
+        ds_zmq.connect(reader)
+        readers.append(ds_zmq)
+    while True:
+        got_something = False
+        for reader in readers:
+            topic = None
+            line = None
+            try:
+                topic, line = reader.recv_multipart(flags=zmq.NOBLOCK)
+            except:
+                continue
+            out = None
+            try:
+                parsed = json.loads(line)
+                out = {'timestamp': time.time(), 'json': parsed}
+                if args.filter:
+                    filter_ok = True
+                    path, match = args.filter.split('=')
+                    path_parts = path.split('.')
+                    ptr = None
+                    for path_item in path_parts:
+                        if ptr is None:
+                            ptr = parsed
+                        if path_item not in ptr:
+                            filter_ok = False
+                            break
+                        ptr = ptr[path_item]
+                    if not filter_ok or str(ptr) != match:
+                        continue
+            except:
+                out = {'timestamp': time.time(), 'text': line.strip()}
+            zhub_socket.send(topic.encode('ascii', errors='ignore'), flags=zmq.SNDMORE)
+            zhub_socket.send_string(json.dumps(out))
+            got_something = True
+        if not got_something:
+            time.sleep(0.1)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BaseException as be:
+        logger.exception(be)
