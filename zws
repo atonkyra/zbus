@@ -19,6 +19,7 @@ parser.add_argument('-l', '--listen', required=True, help='listen-address')
 parser.add_argument('-p', '--port', required=True, help='listen-port')
 parser.add_argument('-z', '--publisher-socket', required=True, help='zmq-notation of the publish socket, ex: tcp://1.2.3.4:31337')
 parser.add_argument('-S', '--ssl', required=False, help='arg: keyfile,certfile', default=None)
+parser.add_argument('-H', '--history', required=False, help='history source, ex tcp://1.2.3.4:31337', default=None)
 args = parser.parse_args()
 
 ctx = zmq.Context()
@@ -26,6 +27,15 @@ ctx = zmq.Context()
 def handle_listener(ws, remote_addr, remote_port):
     while True:
         logger.info('<%s:%s> new subscriber', remote_addr, remote_port)
+        if args.history is not None:
+            req_socket = ctx.socket(zmq.REQ)
+            req_socket.connect(args.history)
+            req_socket.send_json({})
+            history_items = json.loads(req_socket.recv())
+            req_socket.close()
+            for history_item in history_items:
+                #logger.info("%-12s %s", history_item[0], history_item[1])
+                pass
         subscribe_target = ws.read_message()
         logger.info('<%s:%s> subscribed to "%s"', remote_addr, remote_port, subscribe_target)
         zs = ctx.socket(zmq.SUB)
