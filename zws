@@ -27,17 +27,22 @@ ctx = zmq.Context()
 def handle_listener(ws, remote_addr, remote_port):
     while True:
         logger.info('<%s:%s> new subscriber', remote_addr, remote_port)
+        subscribe_target = ws.read_message()
+        logger.info('<%s:%s> subscribing to "%s"', remote_addr, remote_port, subscribe_target)
         if args.history is not None:
+            logger.info('<%s:%s> requesting history info', remote_addr, remote_port)
             req_socket = ctx.socket(zmq.REQ)
             req_socket.connect(args.history)
             req_socket.send_json({})
             history_items = json.loads(req_socket.recv())
             req_socket.close()
+            logger.info('<%s:%s> sending history info (%i items)', remote_addr, remote_port, len(history_items))
             for history_item in history_items:
-                #logger.info("%-12s %s", history_item[0], history_item[1])
-                pass
-        subscribe_target = ws.read_message()
-        logger.info('<%s:%s> subscribed to "%s"', remote_addr, remote_port, subscribe_target)
+                topic = history_item[0]
+                item = json.loads(history_item[1])
+                item['topic'] = topic
+                item['history'] = True
+                ws.send(json.dumps(item))
         zs = ctx.socket(zmq.SUB)
         zs.set(zmq.SUBSCRIBE, b'')
         zs.connect(args.publisher_socket)
