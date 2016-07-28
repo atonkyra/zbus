@@ -3,7 +3,6 @@ from geventwebsocket.handler import WebSocketHandler
 from gevent import pywsgi
 import gevent
 import zmq.green as zmq
-
 import argparse
 import logging
 import json
@@ -27,13 +26,22 @@ ctx = zmq.Context()
 def handle_listener(ws, remote_addr, remote_port):
     while True:
         logger.info('<%s:%s> new subscriber', remote_addr, remote_port)
-        subscribe_target = ws.read_message()
-        logger.info('<%s:%s> subscribing to "%s"', remote_addr, remote_port, subscribe_target)
+        client_options = ws.read_message()
+        if client_options == "undefined":
+            logger.info('<%s:%s> legacy-client, subscribing to ALL topics', remote_addr, remote_port)
+            client_options = {'history': 1, 'topic':[]}
+        else:
+            client_options = json.loads(client_options)
+        topic_logstring = str(client_options['topic'])
+        if len(client_options['topic']) == 0:
+            client_options['topic'].append('')
+            topic_logstring = '*'
+        logger.info('<%s:%s> subscribing to %s', remote_addr, remote_port, topic_logstring)
         if args.history is not None:
             logger.info('<%s:%s> requesting history info', remote_addr, remote_port)
             req_socket = ctx.socket(zmq.REQ)
             req_socket.connect(args.history)
-            req_socket.send_json({})
+            req_socket.send_json({'length': client_options['history']})
             history_items = json.loads(req_socket.recv())
             req_socket.close()
             logger.info('<%s:%s> sending history info (%i items)', remote_addr, remote_port, len(history_items))
@@ -44,7 +52,8 @@ def handle_listener(ws, remote_addr, remote_port):
                 item['history'] = True
                 ws.send(json.dumps(item))
         zs = ctx.socket(zmq.SUB)
-        zs.set(zmq.SUBSCRIBE, b'')
+        for topic in client_options['topic']:
+            zs.set(zmq.SUBSCRIBE, topic.encode('ascii',errors='ignore'))
         zs.connect(args.publisher_socket)
         while True:
             topic, data = zs.recv_multipart()
