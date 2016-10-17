@@ -1,4 +1,4 @@
-gevent==1.1.1
-gevent-websocket==0.9.5
-greenlet==0.4.9
-pyzmq==15.2.0
+gevent
+gevent-websocket
+greenlet
+pyzmq

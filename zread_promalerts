@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+import time
+from geventwebsocket.handler import WebSocketHandler
+from gevent import pywsgi
+import gevent
+import zmq.green as zmq
+import argparse
+import logging
+import json
+from cStringIO import StringIO
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
+)
+logger = logging.getLogger('zws')
+
+parser = argparse.ArgumentParser(description='listen for incoming messages and deal them to subscribers')
+parser.add_argument('-l', '--listen', required=True, help='listen-address')
+parser.add_argument('-P', '--port', required=True, help='listen-port')
+parser.add_argument('-S', '--ssl', required=False, help='arg: keyfile,certfile', default=None)
+parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
+
+args = parser.parse_args()
+
+context = zmq.Context()
+zhub_socket = context.socket(zmq.PUB)
+zhub_socket.connect(args.publish)
+
+def app(environ, start_response):
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    length = int(environ.get('CONTENT_LENGTH', '0'))
+    body = StringIO(environ['wsgi.input'].read(length))
+    jsn = json.loads(body.read())
+    for alert in jsn['alerts']:
+        pmsg = {'timestamp': time.time(), 'text': "%s" % (alert['annotations']['text'])}
+        if 'tags' in alert['annotations']:
+            pmsg['tags'] = alert['annotations']['tags'].split(',')
+        pmsg['status'] = alert['status']
+        topic = 'PROM-ALERT'
+        if alert['status'] == 'resolved':
+            topic = 'PROM-OK'
+        if 'topic' in alert['annotations']:
+            topic = alert['annotations']['topic']
+        out_json = json.dumps(pmsg)
+        zhub_socket.send(topic.encode('ascii', errors='ignore'), flags=zmq.SNDMORE)
+        zhub_socket.send_string(out_json)
+        logger.info("sent %s", out_json)
+    return ''
+
+server = None
+if args.ssl is not None:
+    key, cert = args.ssl.split(',')
+    server = pywsgi.WSGIServer((args.listen, int(args.port)), app, handler_class=WebSocketHandler, keyfile=key, certfile=cert)
+else:
+    server = pywsgi.WSGIServer((args.listen, int(args.port)), app, handler_class=WebSocketHandler)
+server.serve_forever()
