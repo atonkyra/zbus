@@ -36,10 +36,12 @@ def app(environ, start_response):
     body = StringIO(environ['wsgi.input'].read(length))
     jsn = json.loads(body.read())
     for alert in jsn['alerts']:
-        pmsg = {'timestamp': time.time(), 'text': "%s" % (alert['annotations']['text'])}
-        if 'tags' in alert['annotations']:
-            pmsg['tags'] = alert['annotations']['tags'].split(',')
-        pmsg['status'] = alert['status']
+        pmsg = {'timestamp': time.time(), 'json': {}}
+        for annotation_name in alert['annotations'].keys():
+            annotation_value = alert['annotations'][annotation_name]
+            if annotation_name == 'tags':
+                pmsg['json']['tags'] = annotation_value.split(',')
+        pmsg['json']['status'] = alert['status']
         topic = 'PROM-ALERT'
         if alert['status'] == 'resolved':
             topic = 'PROM-OK'
