@@ -13,7 +13,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
 )
-logger = logging.getLogger('zws')
+logger = logging.getLogger('zread-promalerts')
 
 parser = argparse.ArgumentParser(description='listen for incoming messages and deal them to subscribers')
 parser.add_argument('-l', '--listen', required=True, help='listen-address')
