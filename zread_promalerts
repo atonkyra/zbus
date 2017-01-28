@@ -41,6 +41,10 @@ def app(environ, start_response):
             annotation_value = alert['annotations'][annotation_name]
             if annotation_name == 'tags':
                 pmsg['json']['tags'] = annotation_value.split(',')
+            elif annotation_name == 'topic':
+                pass
+            else:
+                pmsg['json'][annotation_name] = annotation_value
         pmsg['json']['status'] = alert['status']
         topic = 'PROM-ALERT'
         if alert['status'] == 'resolved':
