@@ -15,11 +15,15 @@ parser = argparse.ArgumentParser(description='tail a logfile and output to a Zer
 parser.add_argument('-z', '--zmq-pub-address', required=True, help='zmq-pub to tail', action='append')
 parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
 parser.add_argument('-f', '--filter', required=False, help='filter by json content, syntax a.b.c=d')
+parser.add_argument('-K', '--no-keepalive', required=False, help='disable keepalives', action='store_const', const=True, default=False)
 args = parser.parse_args()
 
 def main():
     context = zmq.Context()
     zhub_socket = context.socket(zmq.PUB)
+    if not args.no_keepalive:
+        zhub_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+        zhub_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 60)
     zhub_socket.connect(args.publish)
     readers = []
     for reader in args.zmq_pub_address:

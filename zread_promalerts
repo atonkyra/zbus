@@ -20,11 +20,14 @@ parser.add_argument('-l', '--listen', required=True, help='listen-address')
 parser.add_argument('-P', '--port', required=True, help='listen-port')
 parser.add_argument('-S', '--ssl', required=False, help='arg: keyfile,certfile', default=None)
 parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
-
+parser.add_argument('-K', '--no-keepalive', required=False, help='disable keepalives', action='store_const', const=True, default=False)
 args = parser.parse_args()
 
 context = zmq.Context()
 zhub_socket = context.socket(zmq.PUB)
+if not args.no_keepalive:
+    zhub_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+    zhub_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 60)
 zhub_socket.connect(args.publish)
 
 def app(environ, start_response):

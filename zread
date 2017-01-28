@@ -14,11 +14,15 @@ logger = logging.getLogger('zread')
 parser = argparse.ArgumentParser(description='tail a logfile and output to a ZeroMQ subscriber')
 parser.add_argument('-f', '--file', required=True, help='file to tail, notation topic:file', action='append')
 parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
+parser.add_argument('-K', '--no-keepalive', required=False, help='disable keepalives', action='store_const', const=True, default=False)
 args = parser.parse_args()
 
 def main():
     context = zmq.Context()
     zhub_socket = context.socket(zmq.PUB)
+    if not args.no_keepalive:
+        zhub_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+        zhub_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 60)
     zhub_socket.connect(args.publish)
     targets = {}
     for target in args.file:

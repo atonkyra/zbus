@@ -21,10 +21,13 @@ def main():
     listen_socket = context.socket(zmq.SUB)
     listen_socket.set(zmq.SUBSCRIBE, b'')
     if not args.no_keepalive:
-        listen_socket.setsockopt(zmq.ZMQ_TCP_KEEPALIVE, 1)
-        listen_socket.setsockopt(zmq.ZMQ_TCP_KEEPALIVE_IDLE, 60)
+        listen_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+        listen_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 60)
     listen_socket.bind(args.listen)
     publish_socket = context.socket(zmq.PUB)
+    if not args.no_keepalive:
+        publish_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+        publish_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 60)
     publish_socket.bind(args.publish)
     while True:
         topic, data = listen_socket.recv_multipart()
