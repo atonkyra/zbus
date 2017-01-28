@@ -13,12 +13,16 @@ logger = logging.getLogger('zhub')
 parser = argparse.ArgumentParser(description='listen for incoming messages and deal them to subscribers')
 parser.add_argument('-l', '--listen', required=True, help='zmq-notation of the listen socket, ex: tcp://*:1337')
 parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket, ex: tcp://*:31337')
+parser.add_argument('-K', '--no-keepalive', required=False, help='disable keepalives', action='store_const', const=True, default=False)
 args = parser.parse_args()
 
 def main():
     context = zmq.Context()
     listen_socket = context.socket(zmq.SUB)
     listen_socket.set(zmq.SUBSCRIBE, b'')
+    if not args.no_keepalive:
+        listen_socket.setsockopt(zmq.ZMQ_TCP_KEEPALIVE, 1)
+        listen_socket.setsockopt(zmq.ZMQ_TCP_KEEPALIVE_IDLE, 60)
     listen_socket.bind(args.listen)
     publish_socket = context.socket(zmq.PUB)
     publish_socket.bind(args.publish)
