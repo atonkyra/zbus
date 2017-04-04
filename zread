@@ -5,6 +5,7 @@ import logging
 import zmq
 import json
 import time
+import re
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
@@ -13,6 +14,9 @@ logger = logging.getLogger('zread')
 
 parser = argparse.ArgumentParser(description='tail a logfile and output to a ZeroMQ subscriber')
 parser.add_argument('-f', '--file', required=True, help='file to tail, notation topic:file', action='append')
+rgroup = parser.add_mutually_exclusive_group(required=False)
+rgroup.add_argument('-m', '--regex-match-pattern', help='use regex match pattern', default=None)
+rgroup.add_argument('-c', '--regex-capture-pattern', help='use regex capture pattern', default=None)
 parser.add_argument('-p', '--publish', required=True, help='zmq-notation of the publish socket for zhub')
 parser.add_argument('-K', '--no-keepalive', required=False, help='disable keepalives', action='store_const', const=True, default=False)
 args = parser.parse_args()
@@ -33,6 +37,14 @@ def main():
         targets[topic] = file
     for result in util.multifilemonitor.MultiFileMonitor(targets).read():
         topic, line = result
+        if args.regex_match_pattern is not None:
+            if re.match(args.regex_match_pattern, line) is None:
+                continue
+        elif args.regex_capture_pattern is not None:
+            res = re.match(args.regex_capture_pattern, line)
+            if res is None:
+                continue
+            line = json.dumps(res.groupdict())
         out = None
         try:
             parsed = json.loads(line)
