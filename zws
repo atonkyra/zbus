@@ -47,6 +47,16 @@ def handle_listener(ws, remote_addr, remote_port):
             logger.info('<%s:%s> sending history info (%i items)', remote_addr, remote_port, len(history_items))
             for history_item in history_items:
                 topic = history_item[0]
+                topic_found = False
+                for client_topic in client_options['topic']:
+                    if client_topic == '':
+                        topic_found = True
+                    elif topic.startswith(client_topic):
+                        topic_found = True
+                    if topic_found:
+                        break
+                if not topic_found:
+                    continue
                 item = json.loads(history_item[1])
                 item['topic'] = topic
                 item['history'] = True
