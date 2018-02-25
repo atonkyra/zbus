@@ -42,7 +42,7 @@ def handle_listener(ws, remote_addr, remote_port):
             req_socket = ctx.socket(zmq.REQ)
             req_socket.connect(args.history)
             req_socket.send_json({'length': client_options['history']})
-            history_items = json.loads(req_socket.recv())
+            history_items = req_socket.recv_json()
             req_socket.close()
             logger.info('<%s:%s> sending history info (%i items)', remote_addr, remote_port, len(history_items))
             for history_item in history_items:
@@ -67,8 +67,8 @@ def handle_listener(ws, remote_addr, remote_port):
         zs.connect(args.publisher_socket)
         while True:
             topic, data = zs.recv_multipart()
-            jd = json.loads(data)
-            jd['topic'] = topic
+            jd = json.loads(data.decode('ascii',errors='ignore'))
+            jd['topic'] = topic.decode('ascii', errors='ignore')
             ws.send(json.dumps(jd))
 
 def app(environ, start_response):
