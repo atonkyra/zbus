@@ -7,7 +7,10 @@ import zmq.green as zmq
 import argparse
 import logging
 import json
-from cStringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 logging.basicConfig(
     level=logging.INFO,
