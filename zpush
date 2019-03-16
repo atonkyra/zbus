@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+import argparse
+import util.multifilemonitor
+import logging
+import zmq
+import json
+import time
+import re
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)-8s %(name)-12s %(message)s'
+)
+logger = logging.getLogger('zread')
+
+parser = argparse.ArgumentParser(description='tail a logfile and output to a ZeroMQ subscriber')
+parser.add_argument('-t', '--topic', required=True, help='topic')
+parser.add_argument('-m', '--message', required=True, help='message')
+parser.add_argument('-p', '--publish', required=False, default='tcp://127.0.0.1:31337', help='zmq-notation of the publish socket for zhub')
+args = parser.parse_args()
+
+def main():
+    context = zmq.Context()
+    zhub_socket = context.socket(zmq.PUB)
+    zhub_socket.connect(args.publish)
+    time.sleep(0.1)
+    out = {'timestamp': time.time(), 'text': args.message}
+    out_json = json.dumps(out)
+    zhub_socket.send(args.topic.encode('ascii', errors='ignore'), flags=zmq.SNDMORE)
+    zhub_socket.send_string(out_json)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except BaseException as be:
+        logger.exception(be)
