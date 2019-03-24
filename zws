@@ -6,6 +6,8 @@ import zmq.green as zmq
 import argparse
 import logging
 import json
+import time
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +21,7 @@ parser.add_argument('-p', '--port', required=True, help='listen-port')
 parser.add_argument('-z', '--publisher-socket', required=True, help='zmq-notation of the publish socket, ex: tcp://1.2.3.4:31337')
 parser.add_argument('-S', '--ssl', required=False, help='arg: keyfile,certfile', default=None)
 parser.add_argument('-H', '--history', required=False, help='history source, ex tcp://1.2.3.4:31337', default=None)
+parser.add_argument('-K', '--no-keepalive', required=False, help='do not send keepalives', default=False, action='store_true')
 args = parser.parse_args()
 
 ctx = zmq.Context()
@@ -65,11 +68,22 @@ def handle_listener(ws, remote_addr, remote_port):
         for topic in client_options['topic']:
             zs.set(zmq.SUBSCRIBE, topic.encode('ascii',errors='ignore'))
         zs.connect(args.publisher_socket)
+        last_sent_ping = time.time()
         while True:
-            topic, data = zs.recv_multipart()
-            jd = json.loads(data.decode('ascii',errors='ignore'))
-            jd['topic'] = topic.decode('ascii', errors='ignore')
-            ws.send(json.dumps(jd))
+            try:
+                topic, data = zs.recv_multipart(flags=zmq.NOBLOCK)
+                jd = json.loads(data.decode('ascii',errors='ignore'))
+                jd['topic'] = topic.decode('ascii', errors='ignore')
+                ws.send(json.dumps(jd))
+            except zmq.Again:
+                gevent.sleep(0.1)
+            finally:
+                if not args.no_keepalive:
+                    cur_time = time.time()
+                    if cur_time - last_sent_ping > 1.0:
+                        ws.send(json.dumps({'ping': cur_time}))
+                        ws.read_message()
+                        last_sent_ping = cur_time
 
 def app(environ, start_response):
     handle_listener(environ['wsgi.websocket'], environ['REMOTE_ADDR'], environ['REMOTE_PORT'])
